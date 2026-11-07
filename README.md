@@ -53,3 +53,11 @@ npm run dev                           # http://localhost:4321
 
 - API キー、パスワード、個人情報は **DB にもコードにも書かない**。`services` 列はサービス名だけ。
 - 本番の `ALLOW_UNAUTHENTICATED_ADMIN` は `false` のまま。
+
+## 管理画面とデータモデル
+
+- スキーマは `migrations/0001_init.sql`。カテゴリ（2 階層まで）→ アイテム（子アイテム可）。開発情報・サービス・ToDo は別テーブルで、常に非公開。
+- 公開ページは `v_public_*` ビューだけを読む（`src/lib/db.ts` の `getPublishedTree` など）。カテゴリかアイテムが非公開なら、リンク・画像・タグもまとめて出ない。
+- 画像は R2（バインディング `MEDIA`、バケット `products-media`）。公開ページ用は `/media/...` で、公開中アイテムの画像だけを返す。
+- 管理画面から保存される文字列は `src/lib/guard.ts` でチェックし、API キー・パスワード・メールアドレス・電話番号らしきものは保存を拒否する。`npm test` でガードの単体テストが走る。
+- 初回セットアップ: `wrangler r2 bucket create products-media`、ローカルは `npm run db:migrate:local` のあと `npm run dev`。

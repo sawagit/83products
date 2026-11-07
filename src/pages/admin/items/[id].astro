@@ -1,0 +1,438 @@
+---
+// アイテム編集画面。タブごとに自動保存し、公開トグルは右上に常に表示する。
+import Admin from '../../../layouts/Admin.astro';
+import { env } from 'cloudflare:workers';
+import { getAdminTree, getItemDetail, mediaUrl, ITEM_STATUSES, LINK_KINDS, STATUS_LABELS } from '../../../lib/db';
+
+const id = Number(Astro.params.id);
+const detail = Number.isInteger(id) ? await getItemDetail(env.DB, id) : null;
+if (!detail) return new Response('Not Found', { status: 404 });
+const { item, dev, links, services, tags, tasks } = detail;
+
+const { categories, items } = await getAdminTree(env.DB);
+const cat = categories.find((c) => c.id === item.category_id);
+const parentCat = cat?.parent_id ? categories.find((c) => c.id === cat.parent_id) : undefined;
+const hiddenByCategory = (cat && !cat.is_public) || (parentCat && !parentCat.is_public);
+const catOptions = categories.map((c) => ({
+  id: c.id,
+  name: c.parent_id ? `${categories.find((p) => p.id === c.parent_id)?.name ?? ''} › ${c.name}` : c.name,
+}));
+// 親アイテム候補：自分と自分の子孫以外
+const descendants = new Set<number>([item.id]);
+let grew = true;
+while (grew) {
+  grew = false;
+  for (const i of items) if (i.parent_item_id && descendants.has(i.parent_item_id) && !descendants.has(i.id)) {
+    descendants.add(i.id);
+    grew = true;
+  }
+}
+const parentOptions = items.filter((i) => !descendants.has(i.id));
+const thumb = mediaUrl(item.thumbnail_key, true);
+const LINK_LABELS: Record<string, string> = {
+  web: 'Web',
+  store: 'ストア',
+  youtube: 'YouTube',
+  x: 'X',
+  discord: 'Discord',
+  github: 'GitHub',
+  docs: 'ドキュメント',
+  other: 'その他',
+};
+const api = `/admin/api/items/${item.id}`;
+const openTasks = tasks.filter((t) => !t.done).length;
+---
+
+<Admin title={item.title} currentItemId={item.id}>
+  <div class="ed-head">
+    <div class="ed-title">
+      <h1 data-head-title>{item.title}</h1>
+      <p class="muted">
+        <span>/{cat?.slug ?? '?'}/{item.slug}</span> · <span data-head-status>{STATUS_LABELS[item.status]}</span> ·
+        <span class="save-status" data-save-status>自動保存</span>
+      </p>
+    </div>
+    <div class="ed-actions">
+      <button
+        class="switch"
+        type="button"
+        data-public-toggle="item"
+        data-id={item.id}
+        aria-pressed={item.is_public ? 'true' : 'false'}
+      >
+        <span data-switch-label>{item.is_public ? '公開 ON' : '非公開'}</span>
+      </button>
+      <a class="btn small" href={`/#cat-${cat?.slug ?? ''}`} target="_blank" rel="noopener">公開ページで見る ↗</a>
+    </div>
+  </div>
+  {
+    hiddenByCategory && (
+      <p class="notice">
+        カテゴリ「{parentCat && !parentCat.is_public ? parentCat.name : cat?.name}」が非公開なので、このアイテムを ON にしても公開ページには出ません。
+        <a href="/admin/categories">カテゴリを開く</a>
+      </p>
+    )
+  }
+
+  <div class="tabs" role="tablist" aria-label="編集項目">
+    <button role="tab" type="button" aria-selected="true" aria-controls="tab-basic" id="t-basic">基本</button>
+    <button role="tab" type="button" aria-selected="false" aria-controls="tab-links" id="t-links">リンク <small>{links.length || ''}</small></button>
+    <button role="tab" type="button" aria-selected="false" aria-controls="tab-dev" id="t-dev" class="private-tab">開発情報</button>
+    <button role="tab" type="button" aria-selected="false" aria-controls="tab-services" id="t-services" class="private-tab">サービス <small>{services.length || ''}</small></button>
+    <button role="tab" type="button" aria-selected="false" aria-controls="tab-todo" id="t-todo" class="private-tab">ToDo <small>{openTasks || ''}</small></button>
+  </div>
+
+  <!-- 基本（公開される） -->
+  <section class="panel" role="tabpanel" id="tab-basic" aria-labelledby="t-basic">
+    <p class="scope public">公開ページに出る情報です</p>
+    <form class="grid" data-autosave data-endpoint={api} data-section="basic">
+      <label class="span3">タイトル<input name="title" value={item.title} required maxlength="200" data-sync-title={item.id} /></label>
+      <label class="span3">概要（一覧に出る 1〜2 行）<input name="summary" value={item.summary ?? ''} maxlength="500" /></label>
+      <label class="span3">本文（Markdown）<textarea name="body_md" rows="10">{item.body_md ?? ''}</textarea></label>
+      <label
+        >カテゴリ
+        <select name="category_id">
+          {catOptions.map((c) => <option value={c.id} selected={c.id === item.category_id}>{c.name}</option>)}
+        </select>
+      </label>
+      <label
+        >ステータス
+        <select name="status">
+          {ITEM_STATUSES.map((s) => <option value={s} selected={s === item.status}>{STATUS_LABELS[s]}</option>)}
+        </select>
+      </label>
+      <label>リリース日<input name="released_on" type="date" value={item.released_on ?? ''} /></label>
+      <label>公開ID<input name="public_code" value={item.public_code ?? ''} placeholder="83P-G01" maxlength="40" /></label>
+      <label>slug（URL）<input name="slug" value={item.slug} maxlength="120" /></label>
+      <label>並び順<input name="sort_order" type="number" value={item.sort_order} /></label>
+      <label class="span2"
+        >親アイテム（シリーズ・チャンネルなど）
+        <select name="parent_item_id">
+          <option value="">なし</option>
+          {parentOptions.map((p) => <option value={p.id} selected={p.id === item.parent_item_id}>{p.title}</option>)}
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="featured" checked={!!item.featured} /> 大きく見せる（featured）</label>
+      <p class="errors span3" data-errors></p>
+    </form>
+
+    <div class="thumb">
+      <div class="thumb-box" data-thumb-box>
+        {thumb ? <img src={thumb} alt="" data-thumb-img /> : <span class="muted" data-thumb-empty>サムネなし</span>}
+      </div>
+      <div>
+        <label class="btn small">
+          画像を選ぶ<input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" hidden data-thumb-upload={api} />
+        </label>
+        <button class="btn small danger" type="button" data-thumb-remove={api} hidden={!thumb}>外す</button>
+        <p class="hint">PNG / JPEG / WebP / GIF / AVIF、5MB まで。アイテムが公開中のときだけ公開ページから見えます。</p>
+        <p class="errors" data-thumb-errors></p>
+      </div>
+    </div>
+
+    <form class="tags" data-autosave data-endpoint={api} data-section="tags" data-single="tags">
+      <label>タグ（カンマ区切り。公開アイテムのタグは公開されます）<input name="tags" value={tags.join(', ')} placeholder="Three.js, Unity" /></label>
+      <p class="errors" data-errors></p>
+    </form>
+  </section>
+
+  <!-- リンク（1 件ずつ公開を選べる） -->
+  <section class="panel" role="tabpanel" id="tab-links" aria-labelledby="t-links" hidden>
+    <p class="scope public">「公開」にチェックしたリンクだけが公開ページに出ます。一番上の公開リンクがメインのリンクになります。</p>
+    <form data-autosave data-endpoint={api} data-section="links" data-list>
+      <div class="list" data-rows>
+        {
+          links.map((l) => (
+            <div class="list-row link-row" data-row>
+              <select name="kind" aria-label="種類">
+                {LINK_KINDS.map((k) => <option value={k} selected={k === l.kind}>{LINK_LABELS[k]}</option>)}
+              </select>
+              <input name="label" value={l.label ?? ''} placeholder="表示名（任意）" aria-label="表示名" />
+              <input name="url" value={l.url} placeholder="https://" aria-label="URL" />
+              <label class="check"><input type="checkbox" name="is_public" checked={!!l.is_public} /> 公開</label>
+              <span class="row-tools">
+                <button type="button" class="icon-btn" data-move="-1" aria-label="上へ">↑</button>
+                <button type="button" class="icon-btn" data-move="1" aria-label="下へ">↓</button>
+                <button type="button" class="icon-btn" data-remove-row aria-label="削除">✕</button>
+              </span>
+            </div>
+          ))
+        }
+      </div>
+      <template data-row-template>
+        <div class="list-row link-row" data-row>
+          <select name="kind" aria-label="種類">
+            {LINK_KINDS.map((k) => <option value={k}>{LINK_LABELS[k]}</option>)}
+          </select>
+          <input name="label" placeholder="表示名（任意）" aria-label="表示名" />
+          <input name="url" placeholder="https://" aria-label="URL" />
+          <label class="check"><input type="checkbox" name="is_public" checked /> 公開</label>
+          <span class="row-tools">
+            <button type="button" class="icon-btn" data-move="-1" aria-label="上へ">↑</button>
+            <button type="button" class="icon-btn" data-move="1" aria-label="下へ">↓</button>
+            <button type="button" class="icon-btn" data-remove-row aria-label="削除">✕</button>
+          </span>
+        </div>
+      </template>
+      <button type="button" class="btn small" data-add-row>+ リンクを追加</button>
+      <p class="errors" data-errors></p>
+    </form>
+  </section>
+
+  <!-- 開発情報（常に非公開） -->
+  <section class="panel" role="tabpanel" id="tab-dev" aria-labelledby="t-dev" hidden>
+    <p class="scope private">常に非公開です。APIキー・パスワード・個人情報は保存できません（見つけたら保存を止めます）。</p>
+    <form class="grid" data-autosave data-endpoint={api} data-section="dev">
+      <label>リポジトリ URL<input name="repo_url" value={dev.repo_url ?? ''} placeholder="https://github.com/..." /></label>
+      <label>プレビュー URL<input name="preview_url" value={dev.preview_url ?? ''} placeholder="https://...pages.dev" /></label>
+      <label>本番 URL（管理用）<input name="prod_url" value={dev.prod_url ?? ''} placeholder="https://" /></label>
+      <label class="span3">技術スタック<input name="tech_stack" value={dev.tech_stack ?? ''} placeholder="Astro, Three.js, D1" /></label>
+      <label class="span3">開発メモ（Markdown）<textarea name="dev_notes_md" rows="12">{dev.dev_notes_md ?? ''}</textarea></label>
+      <p class="errors span3" data-errors></p>
+    </form>
+    <p class="quick-links">
+      {dev.repo_url && <a class="btn small" href={dev.repo_url} target="_blank" rel="noopener">リポジトリ ↗</a>}
+      {dev.preview_url && <a class="btn small" href={dev.preview_url} target="_blank" rel="noopener">プレビュー ↗</a>}
+      {dev.prod_url && <a class="btn small" href={dev.prod_url} target="_blank" rel="noopener">本番 ↗</a>}
+    </p>
+  </section>
+
+  <!-- 連携サービス（常に非公開） -->
+  <section class="panel" role="tabpanel" id="tab-services" aria-labelledby="t-services" hidden>
+    <p class="scope private">常に非公開です。サービス名と管理画面の URL だけを記録します（キーやパスワードは入れません）。</p>
+    <form data-autosave data-endpoint={api} data-section="services" data-list>
+      <div class="list" data-rows>
+        {
+          services.map((s) => (
+            <div class="list-row svc-row" data-row>
+              <input name="name" value={s.name} placeholder="サービス名" aria-label="サービス名" />
+              <input name="role" value={s.role ?? ''} placeholder="役割（ホスティング、DB など）" aria-label="役割" />
+              <input name="console_url" value={s.console_url ?? ''} placeholder="管理画面 URL" aria-label="管理画面 URL" />
+              <span class="row-tools">
+                {s.console_url && <a class="icon-btn" href={s.console_url} target="_blank" rel="noopener" aria-label="開く">↗</a>}
+                <button type="button" class="icon-btn" data-remove-row aria-label="削除">✕</button>
+              </span>
+            </div>
+          ))
+        }
+      </div>
+      <template data-row-template>
+        <div class="list-row svc-row" data-row>
+          <input name="name" placeholder="サービス名" aria-label="サービス名" />
+          <input name="role" placeholder="役割（ホスティング、DB など）" aria-label="役割" />
+          <input name="console_url" placeholder="管理画面 URL" aria-label="管理画面 URL" />
+          <span class="row-tools"><button type="button" class="icon-btn" data-remove-row aria-label="削除">✕</button></span>
+        </div>
+      </template>
+      <button type="button" class="btn small" data-add-row>+ サービスを追加</button>
+      <p class="errors" data-errors></p>
+    </form>
+  </section>
+
+  <!-- ToDo（常に非公開） -->
+  <section class="panel" role="tabpanel" id="tab-todo" aria-labelledby="t-todo" hidden>
+    <p class="scope private">常に非公開です。公開前のチェックリストなどに。</p>
+    <form data-autosave data-endpoint={api} data-section="tasks" data-list>
+      <div class="list" data-rows>
+        {
+          tasks.map((t) => (
+            <div class="list-row task-row" data-row>
+              <input type="checkbox" name="done" checked={!!t.done} aria-label="完了" />
+              <input name="text" value={t.text} aria-label="内容" />
+              <span class="row-tools">
+                <button type="button" class="icon-btn" data-move="-1" aria-label="上へ">↑</button>
+                <button type="button" class="icon-btn" data-move="1" aria-label="下へ">↓</button>
+                <button type="button" class="icon-btn" data-remove-row aria-label="削除">✕</button>
+              </span>
+            </div>
+          ))
+        }
+      </div>
+      <template data-row-template>
+        <div class="list-row task-row" data-row>
+          <input type="checkbox" name="done" aria-label="完了" />
+          <input name="text" aria-label="内容" />
+          <span class="row-tools">
+            <button type="button" class="icon-btn" data-move="-1" aria-label="上へ">↑</button>
+            <button type="button" class="icon-btn" data-move="1" aria-label="下へ">↓</button>
+            <button type="button" class="icon-btn" data-remove-row aria-label="削除">✕</button>
+          </span>
+        </div>
+      </template>
+      <button type="button" class="btn small" data-add-row>+ ToDo を追加</button>
+      <p class="errors" data-errors></p>
+    </form>
+  </section>
+
+  <div class="danger-zone">
+    <button class="btn small danger" type="button" data-delete-item={item.id}>このアイテムを削除</button>
+    <span class="hint">作成 {item.created_at} · 最終更新 {item.updated_at}{item.published_at && ` · 初公開 ${item.published_at}`}</span>
+  </div>
+</Admin>
+
+<style>
+  .ed-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .ed-title {
+    min-width: 0;
+  }
+  .ed-title h1 {
+    margin: 0;
+    font-size: 22px;
+    overflow-wrap: anywhere;
+  }
+  .ed-title p {
+    margin: 4px 0 0;
+    font-size: 12px;
+  }
+  .ed-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex: none;
+  }
+  .notice {
+    padding: 8px 12px;
+    margin: 0 0 14px;
+    font-size: 13px;
+    border-radius: 8px;
+    background: var(--a-bad-soft);
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--a-line);
+    margin-bottom: 14px;
+    overflow-x: auto;
+  }
+  .tabs button {
+    font: inherit;
+    padding: 8px 14px;
+    color: var(--a-muted);
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tabs button[aria-selected='true'] {
+    color: var(--a-fg);
+    font-weight: 600;
+    border-bottom-color: var(--a-accent);
+  }
+  .tabs .private-tab::before {
+    content: '🔒 ';
+    font-size: 11px;
+  }
+  .tabs small {
+    color: var(--a-muted);
+    font-weight: 400;
+  }
+  .scope {
+    margin: 0 0 14px;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+  .scope.public {
+    background: rgba(18, 163, 127, 0.1);
+  }
+  .scope.private {
+    background: var(--a-hover);
+  }
+  .thumb {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--a-line);
+  }
+  .thumb-box {
+    width: 200px;
+    aspect-ratio: 16 / 10;
+    flex: none;
+    display: grid;
+    place-items: center;
+    background: var(--a-bg);
+    border: 1px dashed var(--a-line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .thumb-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .tags {
+    margin-top: 16px;
+  }
+  .list {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .list-row {
+    display: grid;
+    gap: 8px;
+    align-items: center;
+  }
+  .link-row {
+    grid-template-columns: 120px 160px minmax(0, 1fr) auto auto;
+  }
+  .svc-row {
+    grid-template-columns: 180px 200px minmax(0, 1fr) auto;
+  }
+  .task-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .task-row:has(input[type='checkbox']:checked) input[name='text'] {
+    text-decoration: line-through;
+    color: var(--a-muted);
+  }
+  .row-tools {
+    display: flex;
+    gap: 2px;
+  }
+  .row-tools .icon-btn {
+    font-size: 13px;
+    color: var(--a-muted);
+    text-decoration: none;
+  }
+  .quick-links {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 0;
+  }
+  .danger-zone {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  @media (max-width: 860px) {
+    .ed-head {
+      flex-direction: column;
+    }
+    .ed-actions {
+      flex-direction: row;
+      align-items: center;
+    }
+    .link-row,
+    .svc-row {
+      grid-template-columns: 1fr;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--a-line);
+    }
+    .thumb {
+      flex-direction: column;
+    }
+  }
+</style>

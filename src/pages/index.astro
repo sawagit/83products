@@ -37,8 +37,8 @@ const total = tree.reduce((n, c) => n + c.items.length, 0);
                   <div class="card-body">
                     <h4>{item.title}</h4>
                     {item.summary && <p>{item.summary}</p>}
-                    {item.public_url && (
-                      <a class="card-link" href={item.public_url} target="_blank" rel="noopener">
+                    {item.primary_url && (
+                      <a class="card-link" href={item.primary_url} target="_blank" rel="noopener">
                         開く ↗
                       </a>
                     )}

@@ -14,6 +14,13 @@
       "migrations_dir": "migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      // 画像・動画の置き場。`wrangler r2 bucket create products-media` で作成する
+      "binding": "MEDIA",
+      "bucket_name": "products-media"
+    }
+  ],
   "vars": {
     // Cloudflare Access（Zero Trust）で /admin を保護する設定。
     // 例: CF_ACCESS_TEAM_DOMAIN = "yourteam.cloudflareaccess.com"
