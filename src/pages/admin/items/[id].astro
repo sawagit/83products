@@ -2,7 +2,8 @@
 // アイテム編集画面。タブごとに自動保存し、公開トグルは右上に常に表示する。
 import Admin from '../../../layouts/Admin.astro';
 import { env } from 'cloudflare:workers';
-import { getAdminTree, getItemDetail, mediaUrl, ITEM_STATUSES, LINK_KINDS, STATUS_LABELS } from '../../../lib/db';
+import { mediaBucket } from '../../../lib/media';
+import { getAdminTree, getItemDetail, mediaUrl, thumbnailSrc, ITEM_STATUSES, LINK_KINDS, STATUS_LABELS } from '../../../lib/db';
 
 const id = Number(Astro.params.id);
 const detail = Number.isInteger(id) ? await getItemDetail(env.DB, id) : null;
@@ -28,7 +29,9 @@ while (grew) {
   }
 }
 const parentOptions = items.filter((i) => !descendants.has(i.id));
-const thumb = mediaUrl(item.thumbnail_key, true);
+const thumb = thumbnailSrc(item.thumbnail_key, item.thumbnail_url, true);
+const uploaded = mediaUrl(item.thumbnail_key, true);
+const hasMedia = mediaBucket() !== null;
 const LINK_LABELS: Record<string, string> = {
   web: 'Web',
   store: 'ストア',
@@ -113,21 +116,36 @@ const openTasks = tasks.filter((t) => !t.done).length;
         </select>
       </label>
       <label class="check"><input type="checkbox" name="featured" checked={!!item.featured} /> 大きく見せる（featured）</label>
+      <label class="span3"
+        >サムネ画像 URL（外部の画像。{hasMedia ? 'アップロード画像があればそちらを優先' : 'R2 未設定の間はこちらで指定'}）
+        <input name="thumbnail_url" value={item.thumbnail_url ?? ''} placeholder="https://..." data-thumb-url />
+      </label>
       <p class="errors span3" data-errors></p>
     </form>
 
     <div class="thumb">
-      <div class="thumb-box" data-thumb-box>
+      <div class="thumb-box" data-thumb-box data-uploaded={uploaded ? '1' : '0'}>
         {thumb ? <img src={thumb} alt="" data-thumb-img /> : <span class="muted" data-thumb-empty>サムネなし</span>}
       </div>
-      <div>
-        <label class="btn small">
-          画像を選ぶ<input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" hidden data-thumb-upload={api} />
-        </label>
-        <button class="btn small danger" type="button" data-thumb-remove={api} hidden={!thumb}>外す</button>
-        <p class="hint">PNG / JPEG / WebP / GIF / AVIF、5MB まで。アイテムが公開中のときだけ公開ページから見えます。</p>
-        <p class="errors" data-thumb-errors></p>
-      </div>
+      {
+        hasMedia ? (
+          <div>
+            <label class="btn small">
+              画像をアップロード
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" hidden data-thumb-upload={api} />
+            </label>
+            <button class="btn small danger" type="button" data-thumb-remove={api} hidden={!uploaded}>
+              アップロード画像を外す
+            </button>
+            <p class="hint">PNG / JPEG / WebP / GIF / AVIF、5MB まで。アイテムが公開中のときだけ公開ページから見えます。</p>
+            <p class="errors" data-thumb-errors />
+          </div>
+        ) : (
+          <p class="hint">
+            画像のアップロード（R2）は未設定です。今は上の「サムネ画像 URL」に外部の画像 URL を入れてください。R2 を有効にするとここにアップロードボタンが出ます。
+          </p>
+        )
+      }
     </div>
 
     <form class="tags" data-autosave data-endpoint={api} data-section="tags" data-single="tags">

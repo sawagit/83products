@@ -119,6 +119,7 @@ export function parseBasic(data: unknown): Parsed<ItemBasic> {
       released_on: date(d.released_on, 'released_on', issues),
       featured: bool(d.featured),
       sort_order: int(d.sort_order),
+      thumbnail_url: url(d.thumbnail_url, 'thumbnail_url', issues),
     },
     issues,
   );

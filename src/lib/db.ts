@@ -24,6 +24,10 @@ export type PublicStatus = 'live' | 'wip' | 'archive';
 export const mediaUrl = (key: string | null, admin = false) =>
   key ? `${admin ? '/admin/media' : '/media'}/${key.split('/').map(encodeURIComponent).join('/')}` : null;
 
+/** サムネの表示 URL：アップロード画像（R2）があればそれ、なければ外部 URL */
+export const thumbnailSrc = (key: string | null, externalUrl: string | null, admin = false) =>
+  mediaUrl(key, admin) ?? externalUrl ?? null;
+
 // ---------- 公開ページ用（v_public_* だけを読む） ----------
 
 export interface PublicCategory {
@@ -78,13 +82,13 @@ export async function getPublishedTree(db: D1Database): Promise<CategoryWithItem
     db.prepare(
       `SELECT id, category_id, parent_item_id, slug, public_code, title, summary, body_md,
               public_status AS status, released_on, featured, sort_order, published_at,
-              primary_url, thumbnail_key
+              primary_url, thumbnail_key, thumbnail_url AS thumbnail_ext
          FROM v_public_items ORDER BY category_id, sort_order, id`,
     ),
   ]);
-  const publicItems = (items.results as (Omit<PublicItem, 'thumbnail_url'> & { thumbnail_key: string | null })[]).map(
-    ({ thumbnail_key, ...rest }) => ({ ...rest, thumbnail_url: mediaUrl(thumbnail_key) }),
-  );
+  const publicItems = (
+    items.results as (Omit<PublicItem, 'thumbnail_url'> & { thumbnail_key: string | null; thumbnail_ext: string | null })[]
+  ).map(({ thumbnail_key, thumbnail_ext, ...rest }) => ({ ...rest, thumbnail_url: thumbnailSrc(thumbnail_key, thumbnail_ext) }));
   return (cats.results as PublicCategory[]).map((c) => ({
     ...c,
     color: c.color || DEFAULT_COLOR,
@@ -132,6 +136,7 @@ export interface AdminItemRow {
   featured: number;
   sort_order: number;
   thumbnail_key: string | null;
+  thumbnail_url: string | null;
   updated_at: string;
 }
 
@@ -186,7 +191,7 @@ export interface Service {
 }
 
 const ADMIN_ROW_COLUMNS =
-  'id, category_id, parent_item_id, slug, public_code, title, summary, status, is_public, featured, sort_order, thumbnail_key, updated_at';
+  'id, category_id, parent_item_id, slug, public_code, title, summary, status, is_public, featured, sort_order, thumbnail_key, thumbnail_url, updated_at';
 
 export async function getAdminTree(db: D1Database) {
   const [cats, items] = await db.batch([
@@ -249,6 +254,7 @@ export interface ItemBasic {
   released_on: string | null;
   featured: number;
   sort_order: number;
+  thumbnail_url: string | null;
 }
 
 export async function saveItemBasic(db: D1Database, id: number, b: ItemBasic) {
@@ -256,10 +262,10 @@ export async function saveItemBasic(db: D1Database, id: number, b: ItemBasic) {
     .prepare(
       `UPDATE items SET title = ?2, slug = ?3, public_code = ?4, summary = ?5, body_md = ?6, category_id = ?7,
               parent_item_id = ?8, status = ?9, released_on = ?10, featured = ?11, sort_order = ?12,
-              updated_at = datetime('now')
+              thumbnail_url = ?13, updated_at = datetime('now')
         WHERE id = ?1`,
     )
-    .bind(id, b.title, b.slug, b.public_code, b.summary, b.body_md, b.category_id, b.parent_item_id, b.status, b.released_on, b.featured, b.sort_order)
+    .bind(id, b.title, b.slug, b.public_code, b.summary, b.body_md, b.category_id, b.parent_item_id, b.status, b.released_on, b.featured, b.sort_order, b.thumbnail_url)
     .run();
 }
 
@@ -455,11 +461,11 @@ export async function getDashboard(db: D1Database) {
     db.prepare(
       `SELECT id, title, is_public,
               (summary IS NULL OR summary = '') AS no_summary,
-              (thumbnail_key IS NULL) AS no_thumbnail,
+              (thumbnail_key IS NULL AND thumbnail_url IS NULL) AS no_thumbnail,
               NOT EXISTS (SELECT 1 FROM item_links l WHERE l.item_id = items.id AND l.is_public = 1) AS no_link
          FROM items
         WHERE status != 'idea'
-          AND ((summary IS NULL OR summary = '') OR thumbnail_key IS NULL
+          AND ((summary IS NULL OR summary = '') OR (thumbnail_key IS NULL AND thumbnail_url IS NULL)
                OR NOT EXISTS (SELECT 1 FROM item_links l WHERE l.item_id = items.id AND l.is_public = 1))
         ORDER BY is_public DESC, updated_at DESC LIMIT 10`,
     ),

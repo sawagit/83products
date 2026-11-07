@@ -49,6 +49,7 @@ const FIELD_LABELS: Record<string, string> = {
   slug: 'slug',
   public_code: '公開ID',
   released_on: 'リリース日',
+  thumbnail_url: 'サムネ画像 URL',
   category_id: 'カテゴリ',
   parent_item_id: '親アイテム',
   repo_url: 'リポジトリ URL',
@@ -175,6 +176,9 @@ function afterSave(form: HTMLFormElement) {
     if (tree) tree.textContent = titleInput.value;
     document.title = `${titleInput.value} — 83 admin`;
   }
+  // アップロード画像が無いときは、外部 URL をプレビューに出す
+  const thumbUrl = $<HTMLInputElement>('[data-thumb-url]', form);
+  if (thumbUrl && $('[data-thumb-box]')?.dataset.uploaded !== '1') setThumb(thumbUrl.value.trim() || null);
   const status = $<HTMLSelectElement>('select[name=status]', form);
   const headStatus = $('[data-head-status]');
   if (status && headStatus) headStatus.textContent = status.selectedOptions[0]?.textContent ?? '';
@@ -283,9 +287,10 @@ if (location.hash) {
 
 const upload = $<HTMLInputElement>('[data-thumb-upload]');
 const removeBtn = $<HTMLButtonElement>('[data-thumb-remove]');
-function setThumb(url: string | null) {
+function setThumb(url: string | null, uploaded?: boolean) {
   const box = $('[data-thumb-box]');
   if (!box) return;
+  if (uploaded !== undefined) box.dataset.uploaded = uploaded ? '1' : '0';
   box.replaceChildren();
   if (url) {
     const img = document.createElement('img');
@@ -298,7 +303,7 @@ function setThumb(url: string | null) {
     span.textContent = 'サムネなし';
     box.appendChild(span);
   }
-  if (removeBtn) removeBtn.hidden = !url;
+  if (removeBtn) removeBtn.hidden = box.dataset.uploaded !== '1';
 }
 upload?.addEventListener('change', async () => {
   const file = upload.files?.[0];
@@ -310,7 +315,7 @@ upload?.addEventListener('change', async () => {
   const res = await post(upload.dataset.thumbUpload + '/thumbnail', fd);
   if (errBox) errBox.textContent = res.ok ? '' : (res.errors ?? []).map((e) => e.reason).join('\n');
   if (res.ok) {
-    setThumb(res.url ?? null);
+    setThumb(res.url ?? null, true);
     toast('サムネを更新しました');
   }
   upload.value = '';
@@ -318,7 +323,7 @@ upload?.addEventListener('change', async () => {
 removeBtn?.addEventListener('click', async () => {
   if (!confirm('サムネを外しますか？')) return;
   const res = await post(removeBtn.dataset.thumbRemove + '/thumbnail', { remove: true });
-  if (res.ok) setThumb(null);
+  if (res.ok) setThumb($<HTMLInputElement>('[data-thumb-url]')?.value.trim() || null, false);
 });
 
 // ---------- 削除 ----------

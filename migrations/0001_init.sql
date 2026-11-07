@@ -28,7 +28,8 @@ CREATE TABLE items (
   title          TEXT NOT NULL,
   summary        TEXT,                         -- 一覧用の 1〜2 行
   body_md        TEXT,                         -- 詳細ページ本文 (Markdown)
-  thumbnail_key  TEXT,                         -- R2 のオブジェクトキー
+  thumbnail_key  TEXT,                         -- R2 のオブジェクトキー（アップロード画像）
+  thumbnail_url  TEXT,                         -- 外部の画像 URL（R2 を使わない場合）
   status         TEXT NOT NULL DEFAULT 'idea'
                  CHECK (status IN ('idea','dev','live','paused','archived')),
   released_on    TEXT,                         -- YYYY-MM-DD
@@ -121,7 +122,7 @@ WHERE c.is_public = 1 AND (c.parent_id IS NULL OR p.is_public = 1);
 
 CREATE VIEW v_public_items AS
 SELECT i.id, i.category_id, i.parent_item_id, i.slug, i.public_code, i.title, i.summary, i.body_md,
-       i.thumbnail_key, i.status,
+       i.thumbnail_key, i.thumbnail_url, i.status,
        CASE i.status WHEN 'live' THEN 'live' WHEN 'archived' THEN 'archive' ELSE 'wip' END AS public_status,
        i.released_on, i.featured, i.sort_order, i.published_at,
        (SELECT l.url FROM item_links l WHERE l.item_id = i.id AND l.is_public = 1
