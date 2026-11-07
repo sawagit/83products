@@ -1,0 +1,3 @@
+# ローカル開発用。コピーして .dev.vars にする（.dev.vars は git に入らない）
+# ローカルでは Cloudflare Access が無いので /admin を素通りさせる
+ALLOW_UNAUTHENTICATED_ADMIN=true

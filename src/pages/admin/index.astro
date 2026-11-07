@@ -1,0 +1,301 @@
+---
+// 非公開ページ：全情報を持ち、ここで追加・公開トグル・削除をする。
+// 認証は src/middleware.ts（Cloudflare Access）で行う。
+import Base from '../../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+import { getAdminTree } from '../../lib/db';
+
+const tree = await getAdminTree(env.DB);
+const who = Astro.locals.adminEmail ?? '';
+const flash = Astro.url.searchParams.get('msg');
+const total = tree.reduce((n, c) => n + c.items.length, 0);
+const published = tree.reduce((n, c) => n + c.items.filter((i) => i.published).length, 0);
+---
+
+<Base title="Admin — 83Products">
+  <main class="admin container">
+    <header class="admin-head">
+      <div>
+        <h1>Admin</h1>
+        <p class="muted">
+          {published} / {total} 件を公開中 · <a href="/" target="_blank">公開ページを見る ↗</a>
+        </p>
+      </div>
+      <span class="who">{who}</span>
+    </header>
+
+    {flash && <p class="flash">{flash}</p>}
+
+    <section class="panel">
+      <h2>追加</h2>
+      <form method="post" action="/admin/api/create" class="grid">
+        <label>
+          カテゴリ
+          <select name="category_id" required>
+            {tree.map((c) => <option value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        <label>
+          タイトル <input name="title" required maxlength="120" />
+        </label>
+        <label class="span2">
+          概要（公開） <input name="summary" maxlength="300" />
+        </label>
+        <label>
+          公開URL <input name="public_url" type="url" placeholder="https://" />
+        </label>
+        <label>
+          連携サービス（非公開・名前だけ） <input name="services" placeholder="Vercel, Supabase" />
+        </label>
+        <label>
+          リポジトリURL（非公開） <input name="repo_url" type="url" placeholder="https://github.com/..." />
+        </label>
+        <label>
+          プレビューURL（非公開） <input name="preview_url" type="url" placeholder="https://" />
+        </label>
+        <label class="span2">
+          開発メモ（非公開） <textarea name="dev_notes" rows="3" placeholder="APIキー・パスワード・個人情報は書かない"></textarea>
+        </label>
+        <div class="span2 actions">
+          <button type="submit">非公開で追加</button>
+          <span class="muted">追加後に下のトグルで公開できます</span>
+        </div>
+      </form>
+    </section>
+
+    {
+      tree.map((cat) => (
+        <section class="panel">
+          <h2>
+            <span class="dot" style={`background:${cat.color}`} /> {cat.name}
+            <small class="muted">{cat.items.filter((i) => i.published).length}/{cat.items.length}</small>
+          </h2>
+          {cat.items.length === 0 ? (
+            <p class="muted">まだありません。</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>公開</th>
+                  <th>タイトル</th>
+                  <th>リンク</th>
+                  <th>非公開情報</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {cat.items.map((item) => (
+                  <tr class={item.published ? 'is-on' : ''}>
+                    <td>
+                      <form method="post" action="/admin/api/toggle">
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="published" value={item.published ? '0' : '1'} />
+                        <button type="submit" class={`toggle${item.published ? ' on' : ''}`} aria-label="公開切替">
+                          <span />
+                        </button>
+                      </form>
+                    </td>
+                    <td>
+                      <strong>{item.title}</strong>
+                      {item.summary && <div class="muted small">{item.summary}</div>}
+                    </td>
+                    <td class="links">
+                      {item.public_url && <a href={item.public_url} target="_blank" rel="noopener">公開URL</a>}
+                      {item.repo_url && <a href={item.repo_url} target="_blank" rel="noopener">Repo</a>}
+                      {item.preview_url && <a href={item.preview_url} target="_blank" rel="noopener">Preview</a>}
+                    </td>
+                    <td class="small">
+                      {item.services && <div>🔗 {item.services}</div>}
+                      {item.dev_notes && <div class="notes">{item.dev_notes}</div>}
+                    </td>
+                    <td>
+                      <form method="post" action="/admin/api/delete" onsubmit="return confirm('削除しますか？')">
+                        <input type="hidden" name="id" value={item.id} />
+                        <button type="submit" class="danger">削除</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      ))
+    }
+  </main>
+</Base>
+
+<style>
+  .admin {
+    padding: 32px 0 80px;
+  }
+  .admin-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+  .admin-head h1 {
+    margin: 0;
+    font-size: 1.6rem;
+  }
+  .admin-head p {
+    margin: 4px 0 0;
+    font-size: 0.9rem;
+  }
+  .who {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    background: var(--card);
+    border: 1px solid var(--line);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .flash {
+    background: #e9fbf5;
+    border: 1px solid #b9ecdc;
+    color: #0f6b52;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 18px;
+  }
+  .panel h2 {
+    margin: 0 0 14px;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .muted {
+    color: var(--fg-muted);
+  }
+  .small {
+    font-size: 0.85rem;
+  }
+  .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+  }
+  .span2 {
+    grid-column: span 2;
+  }
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+  }
+  input,
+  select,
+  textarea {
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--fg);
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  button {
+    font: inherit;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 0;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.danger {
+    background: transparent;
+    color: var(--coral);
+    padding: 4px 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+  th {
+    text-align: left;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    font-weight: 500;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tr.is-on td:nth-child(2) strong::after {
+    content: ' 公開中';
+    font-size: 0.7rem;
+    color: var(--mint);
+    font-weight: 600;
+  }
+  .links {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.85rem;
+  }
+  .notes {
+    white-space: pre-wrap;
+    color: var(--fg-muted);
+  }
+  .toggle {
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    background: #cfd5e6;
+    padding: 0;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .toggle span {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: left 0.2s;
+  }
+  .toggle.on {
+    background: var(--mint);
+  }
+  .toggle.on span {
+    left: 21px;
+  }
+  @media (max-width: 700px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+    .span2 {
+      grid-column: span 1;
+    }
+  }
+</style>
