@@ -23,8 +23,8 @@
     // 例: CF_ACCESS_TEAM_DOMAIN = "yourteam.cloudflareaccess.com"
     //     CF_ACCESS_AUD         = Access アプリケーションの Application Audience (AUD) Tag
     // 空のままだと /admin は 403 になる（ローカル開発時は .dev.vars で ALLOW_UNAUTHENTICATED_ADMIN=true）。
-    "CF_ACCESS_TEAM_DOMAIN": "",
-    "CF_ACCESS_AUD": "",
+    "CF_ACCESS_TEAM_DOMAIN": "misty-field-7a97.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "f93aaa07f1468c6ca7292542869a3ca203886e2da5a1a21d980eb007a320cd23",
     "ALLOW_UNAUTHENTICATED_ADMIN": "false"
   }
 }
