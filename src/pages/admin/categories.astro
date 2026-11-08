@@ -1,0 +1,208 @@
+---
+// カテゴリ（ツリーの枝）とサービス台帳の管理
+import Admin from '../../layouts/Admin.astro';
+import { env } from 'cloudflare:workers';
+import { getAdminTree, listServices } from '../../lib/db';
+
+const { categories, items } = await getAdminTree(env.DB);
+const services = await listServices(env.DB);
+const roots = categories.filter((c) => c.parent_id === null);
+const ordered = roots.flatMap((r) => [r, ...categories.filter((c) => c.parent_id === r.id)]);
+const countOf = (id: number) => items.filter((i) => i.category_id === id).length;
+const hasChildren = (id: number) => categories.some((c) => c.parent_id === id);
+---
+
+<Admin title="カテゴリとサービス">
+  <h1 class="page-title">カテゴリとサービス</h1>
+
+  <section class="panel">
+    <h2>カテゴリ</h2>
+    <p class="hint">
+      カテゴリは公開ページのツリーの枝になります（色は 3D のノードの色）。入れ子は 2 階層まで。非公開にすると、中のアイテムもまとめて公開ページから消えます（各アイテムの ON/OFF は保持）。
+    </p>
+    <div class="cat-list">
+      {
+        ordered.map((c) => (
+          <div class={`cat-card${c.parent_id ? ' is-sub' : ''}`}>
+            <div class="cat-head">
+              <strong>{c.name}</strong>
+              <small class="muted">{countOf(c.id)} 件</small>
+              <span class="spacer" />
+              <span class="save-status" data-save-status />
+              <button
+                class="switch small"
+                type="button"
+                data-public-toggle="category"
+                data-id={c.id}
+                aria-pressed={c.is_public ? 'true' : 'false'}
+              >
+                <span data-switch-label>{c.is_public ? '公開 ON' : '非公開'}</span>
+              </button>
+            </div>
+            <form class="cat-form" data-autosave data-endpoint={`/admin/api/categories/${c.id}`}>
+              <label>表示名<input name="name" value={c.name} required maxlength="60" /></label>
+              <label>英語名<input name="name_en" value={c.name_en ?? ''} maxlength="60" /></label>
+              <label>slug<input name="slug" value={c.slug} maxlength="120" /></label>
+              <label>色<input name="color" type="color" value={c.color || '#5b6cff'} /></label>
+              <label>並び順<input name="sort_order" type="number" value={c.sort_order} /></label>
+              <label
+                >親カテゴリ
+                <select name="parent_id" disabled={hasChildren(c.id)}>
+                  <option value="">なし（最上位）</option>
+                  {roots
+                    .filter((r) => r.id !== c.id)
+                    .map((r) => (
+                      <option value={r.id} selected={r.id === c.parent_id}>
+                        {r.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label class="wide">説明（公開）<input name="description" value={c.description ?? ''} maxlength="500" /></label>
+              <label>アイコン<input name="icon" value={c.icon ?? ''} maxlength="40" placeholder="絵文字 or 名前" /></label>
+              <p class="errors wide" data-errors />
+            </form>
+            {countOf(c.id) === 0 && !hasChildren(c.id) && (
+              <button class="btn small danger" type="button" data-delete-category={c.id}>
+                削除
+              </button>
+            )}
+          </div>
+        ))
+      }
+    </div>
+
+    <form class="new-cat" data-create="/admin/api/categories">
+      <h3>カテゴリを追加</h3>
+      <div class="cat-form">
+        <label>表示名<input name="name" required maxlength="60" placeholder="ブログ" /></label>
+        <label>英語名<input name="name_en" maxlength="60" placeholder="Blog" /></label>
+        <label>色<input name="color" type="color" value="#5b6cff" /></label>
+        <label
+          >親カテゴリ
+          <select name="parent_id">
+            <option value="">なし（最上位）</option>
+            {roots.map((r) => <option value={r.id}>{r.name}</option>)}
+          </select>
+        </label>
+        <label>並び順<input name="sort_order" type="number" value={categories.length + 1} /></label>
+      </div>
+      <p class="errors" data-errors></p>
+      <button class="btn primary small" type="submit">追加（非公開で作成）</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>サービス台帳 <small class="muted">常に非公開</small></h2>
+    <p class="hint">
+      アイテムの「サービス」タブで入力した名前がここにまとまります。ダッシュボードの URL とメモだけを記録し、キーやパスワードは保存しません。
+    </p>
+    {
+      services.length === 0 ? (
+        <p class="muted">まだありません。</p>
+      ) : (
+        <div class="svc-list">
+          {services.map((s) => (
+            <form class="svc-form" data-autosave data-endpoint={`/admin/api/services/${s.id}`}>
+              <input name="name" value={s.name} aria-label="サービス名" maxlength="80" />
+              <input name="dashboard_url" value={s.dashboard_url ?? ''} placeholder="ダッシュボード URL" aria-label="ダッシュボード URL" />
+              <input name="notes" value={s.notes ?? ''} placeholder="メモ（プラン、無料枠など）" aria-label="メモ" />
+              <small class="muted">{s.item_count} 件で使用</small>
+              <span class="save-status" data-save-status />
+              <button class="icon-btn" type="button" data-delete-service={s.id} aria-label="削除">
+                ✕
+              </button>
+              <p class="errors" data-errors />
+            </form>
+          ))}
+        </div>
+      )
+    }
+  </section>
+</Admin>
+
+<style>
+  .page-title {
+    margin: 0 0 16px;
+    font-size: 22px;
+  }
+  .cat-list {
+    display: grid;
+    gap: 10px;
+    margin: 12px 0 20px;
+  }
+  .cat-card {
+    padding: 12px 14px;
+    border: 1px solid var(--a-line);
+    border-radius: 8px;
+  }
+  .cat-card.is-sub {
+    margin-left: 28px;
+  }
+  .cat-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .spacer {
+    flex: 1;
+  }
+  .cat-form {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .cat-form .wide {
+    grid-column: span 4;
+  }
+  .cat-form input[type='color'] {
+    width: 100%;
+    height: 36px;
+    padding: 2px;
+    border: 1px solid var(--a-line);
+    border-radius: 8px;
+    background: var(--a-panel);
+  }
+  .new-cat {
+    padding-top: 14px;
+    border-top: 1px solid var(--a-line);
+    display: grid;
+    gap: 10px;
+    justify-items: start;
+  }
+  .new-cat .cat-form {
+    width: 100%;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .new-cat h3 {
+    margin: 0;
+    font-size: 14px;
+  }
+  .svc-list {
+    display: grid;
+    gap: 8px;
+  }
+  .svc-form {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1fr) auto auto auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .svc-form .errors {
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 860px) {
+    .cat-form,
+    .new-cat .cat-form,
+    .svc-form {
+      grid-template-columns: 1fr 1fr;
+    }
+    .cat-form .wide {
+      grid-column: 1 / -1;
+    }
+    .cat-card.is-sub {
+      margin-left: 12px;
+    }
+  }
+</style>

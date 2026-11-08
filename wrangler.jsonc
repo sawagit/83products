@@ -14,6 +14,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // 画像アップロード（R2）はオプション。R2 を有効にしたら下のコメントを外し、
+  // `npx wrangler r2 bucket create products-media` と `npm run cf-typegen` を実行する。
+  // 無いあいだは管理画面のサムネを外部の画像 URL で指定する。
+  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "products-media" }],
   "vars": {
     // Cloudflare Access（Zero Trust）で /admin を保護する設定。
     // 例: CF_ACCESS_TEAM_DOMAIN = "yourteam.cloudflareaccess.com"

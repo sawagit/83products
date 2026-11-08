@@ -11,7 +11,8 @@
     "deploy": "astro build && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply products-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply products-db --remote",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.4.6",

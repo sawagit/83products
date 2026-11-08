@@ -1,0 +1,34 @@
+---
+// 管理画面ツリーのアイテム部分（子アイテムがあれば再帰的に表示する）
+import type { AdminItemRow } from '../../lib/db';
+
+interface Props {
+  items: AdminItemRow[];
+  parents: AdminItemRow[];
+  currentId?: number;
+  depth?: number;
+}
+const { items, parents, currentId, depth = 0 } = Astro.props;
+const kids = (id: number) => items.filter((i) => i.parent_item_id === id);
+---
+
+{
+  parents.length > 0 && (
+    <ul>
+      {parents.map((item) => (
+        <li class="item" data-pub={item.is_public ? '1' : '0'} data-tree-item={item.id}>
+          <a
+            class={`row${item.is_public ? '' : ' is-private'}`}
+            href={`/admin/items/${item.id}`}
+            aria-current={item.id === currentId ? 'page' : undefined}
+          >
+            <span class="label" data-tree-title={item.id}>{item.title}</span>
+            {item.public_code && <span class="code">{item.public_code}</span>}
+            <span class={`dot${item.is_public ? ' on' : ''}`} data-dot-item={item.id} />
+          </a>
+          {depth < 4 && <Astro.self items={items} parents={kids(item.id)} currentId={currentId} depth={depth + 1} />}
+        </li>
+      ))}
+    </ul>
+  )
+}
