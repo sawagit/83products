@@ -1,317 +1,162 @@
 ---
+// 公開ページ：深宇宙の星系（3D）をスクロールで一周 → 星表（作品一覧）
+// 3D は src/scripts/space.js、見た目は src/styles/public.css。
+// 一覧はサーバー側で描画するので、JS や WebGL が動かなくても内容は読める。
 import Base from '../layouts/Base.astro';
-import Hero from '../components/Hero';
 import { env } from 'cloudflare:workers';
-import { getPublishedTree } from '../lib/db';
+import { getPublishedTree, type PublicStatus } from '../lib/db';
+import '../styles/public.css';
 
 const tree = await getPublishedTree(env.DB);
 const siteName = '83Products';
-const tagline = 'Works, archived in one bright system.';
-const total = tree.reduce((n, c) => n + c.items.length, 0);
+
+const STATUS: Record<PublicStatus, { label: string; cls: string }> = {
+  live: { label: '公開中', cls: 'live' },
+  wip: { label: '開発中', cls: 'wip' },
+  archive: { label: 'アーカイブ', cls: '' },
+};
+const ym = (d: string | null) => (d ? d.slice(0, 7).replace('-', '.') : '—');
+
+// 3D と星表が共有するデータ（公開フィールドだけ）
+const cats = tree.map((c) => ({
+  slug: c.slug,
+  name: c.name,
+  name_en: c.name_en || c.name,
+  color: c.color,
+  items: c.items.map((i) => ({
+    key: `${c.slug}/${i.slug}`,
+    code: i.public_code ?? '',
+    title: i.title,
+    released_on: i.released_on,
+    featured: !!i.featured,
+  })),
+}));
+const rows = tree
+  .flatMap((c) => c.items.map((i) => ({ ...i, cat: c, name_en: c.name_en || c.name, key: `${c.slug}/${i.slug}` })))
+  .sort((a, b) => (b.released_on ?? '').localeCompare(a.released_on ?? ''));
+const total = rows.length;
+const spaceData = JSON.stringify(cats).replace(/</g, '\\u003c');
 ---
 
 <Base title={siteName}>
-  <Hero client:load categories={tree} siteName={siteName} tagline={tagline} />
+  <div class="sky" aria-hidden="true"></div>
+  <canvas id="scene" aria-label="成果物ツリーの3D星系"></canvas>
+  <div class="labels" id="labels" aria-hidden="true"></div>
+  <div class="progress" id="progress"></div>
 
-  <main class="container works">
-    <div class="works-head">
-      <h2>すべての成果物</h2>
-      <p class="muted">{total} 件を公開中</p>
+  <header class="bar">
+    <div class="wordmark">83<span>.</span>Products</div>
+    <div class="lap" id="lap">LAP 000°</div>
+    <div class="spacer"></div>
+    <button class="skip" id="skip" type="button">一周を飛ばす ↓</button>
+  </header>
+
+  <section id="intro" aria-label="イントロ">
+    <div class="stage">
+      <div class="layer hero" id="hero">
+        <p class="eyebrow">Works archive</p>
+        <h1>83<span>.</span>Products</h1>
+        <p class="tag">つくったものを、ひとつの星系に。ゲームも、アプリも、動画も、ここから枝分かれしています。</p>
+        <div class="hint">
+          <svg class="mouse" viewBox="0 0 24 36" width="22" height="33" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="21" height="33" rx="10.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+            <rect class="wheel" x="10.6" y="7" width="2.8" height="7" rx="1.4" fill="currentColor"></rect>
+          </svg>
+          ホイールでスクロールして一周する
+        </div>
+      </div>
+      <div class="layer caption" id="caption" aria-live="polite">
+        <span class="cap-idx" id="cap-idx"></span>
+        <span class="cap-name" id="cap-name"></span>
+        <span class="cap-sub" id="cap-sub"></span>
+      </div>
+      <div class="layer finale" id="finale">
+        <h2>星表をひらく</h2>
+        <p>{tree.length} つの枝と {total} 個の作品。下へスクロールすると星表が出ます。</p>
+      </div>
     </div>
+  </section>
 
-    {
-      tree.map((cat) => (
-        <section id={`cat-${cat.slug}`} class="cat">
-          <h3>
-            <span class="dot" style={`background:${cat.color}`} />
-            {cat.name}
-            <small>{cat.items.length}</small>
-          </h3>
-          {cat.items.length === 0 ? (
-            <p class="muted empty">まだ公開されたものはありません。</p>
-          ) : (
-            <ul class="cards">
-              {cat.items.map((item) => (
-                <li class="card" style={`--c:${cat.color}`}>
-                  {item.thumbnail_url && <img src={item.thumbnail_url} alt="" loading="lazy" />}
-                  <div class="card-body">
-                    <h4>{item.title}</h4>
-                    {item.summary && <p>{item.summary}</p>}
-                    {item.primary_url && (
-                      <a class="card-link" href={item.primary_url} target="_blank" rel="noopener">
-                        開く ↗
-                      </a>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ))
-    }
+  <main class="catalog" id="catalog">
+    <div class="catalog-inner">
+      <div class="cat-head">
+        <h2><span class="en">Catalog</span><span class="ja">星表</span></h2>
+        <span class="meta">{tree.length} branches · {total} works</span>
+      </div>
+      <p class="legend">星をクリックするとその作品の行へ移動します。行にマウスを乗せるとサムネイルが浮かび、対応する星が光ります。</p>
+      <div class="filter" id="filter" role="group" aria-label="枝で絞り込む">
+        <button type="button" data-key="all" aria-pressed="true">すべて</button>
+        {
+          tree.map((c) => (
+            <button type="button" data-key={c.slug} aria-pressed="false">
+              <span class="sw" style={`background:${c.color};color:${c.color}`} />
+              {c.name_en || c.name}
+            </button>
+          ))
+        }
+      </div>
+      <div class="sheet">
+        <table class="cat">
+          <thead>
+            <tr><th class="c-id">No.</th><th>作品</th><th class="c-br">枝</th><th>公開</th></tr>
+          </thead>
+          <tbody id="rows">
+            {total === 0 && (
+              <tr class="empty-row"><td colspan="4">まだ公開された作品はありません。</td></tr>
+            )}
+            {
+              rows.map((r) => (
+                <tr
+                  class="r"
+                  tabindex="0"
+                  data-key={r.key}
+                  data-cat={r.cat.slug}
+                  data-color={r.cat.color}
+                  data-thumb={r.thumbnail_url ?? ''}
+                  data-label={`${r.public_code ?? ''} · ${r.name_en.toUpperCase()}`}
+                >
+                  <td class="id">{r.public_code ?? '—'}</td>
+                  <td class="w">
+                    <div class="t" data-id={r.public_code ?? ''}>
+                      <span class="bdot" style={`background:${r.cat.color};color:${r.cat.color}`} />
+                      {r.primary_url ? (
+                        <a href={r.primary_url} target="_blank" rel="noopener" tabindex="-1">
+                          {r.title} <span class="out">↗</span>
+                        </a>
+                      ) : (
+                        r.title
+                      )}
+                      {r.featured ? <span class="feat">注目</span> : null}
+                    </div>
+                    {r.summary && <div class="d">{r.summary}</div>}
+                  </td>
+                  <td class="br">{r.name_en}</td>
+                  <td class="dt">
+                    {ym(r.released_on)}
+                    <br />
+                    <span class={`st ${STATUS[r.status].cls}`}>{STATUS[r.status].label}</span>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      <section class="about" id="about" aria-label="このサイトについて">
+        <span class="meta">Colony 83 · About</span>
+        <p>83Products は、ゲーム・アプリ・動画・発信の記録をひとつの星系にまとめたアーカイブです。新しい作品が公開されると、中心の星からロケットが打ち上がります。</p>
+      </section>
+      <p class="foot">© {new Date().getFullYear()} {siteName} · ロケット・衛星・コロニーは触ると説明が出ます。何もない宇宙をクリックするとソナーが鳴ります。</p>
+    </div>
   </main>
 
-  <footer class="container foot">
-    <span>© {new Date().getFullYear()} {siteName}</span>
-  </footer>
+  <div class="tip" id="tip"></div>
+  <div class="peek" id="peek"></div>
+
+  <script type="application/json" id="space-data" set:html={spaceData} />
+  <script>
+    import { initSpace } from '../scripts/space.js';
+    const el = document.getElementById('space-data');
+    initSpace(JSON.parse(el?.textContent || '[]'));
+  </script>
 </Base>
-
-<style is:global>
-  /* ---- Hero ---- */
-  .hero {
-    position: relative;
-    height: 300vh;
-  }
-  .hero-sticky {
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow: hidden;
-  }
-  .hero-canvas {
-    position: absolute;
-    inset: 0;
-  }
-  .hero-top {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 22px;
-    pointer-events: none;
-  }
-  .hero-top a {
-    pointer-events: auto;
-  }
-  .brand {
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    text-decoration: none;
-    font-size: 1.1rem;
-  }
-  .hero-top nav {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-  .hero-top nav a {
-    font-size: 0.85rem;
-    text-decoration: none;
-    color: var(--fg-muted);
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    backdrop-filter: blur(8px);
-  }
-  .hero-copy {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 10vh;
-    z-index: 2;
-    pointer-events: none;
-    max-width: 640px;
-  }
-  .eyebrow {
-    margin: 0 0 6px;
-    font-size: 0.8rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .hero-copy h1 {
-    margin: 0;
-    font-size: clamp(2rem, 5.5vw, 3.6rem);
-    line-height: 1.1;
-    letter-spacing: -0.03em;
-    font-weight: 700;
-  }
-  .lead {
-    margin: 12px 0 0;
-    font-size: clamp(1rem, 1.6vw, 1.2rem);
-    color: var(--fg-muted);
-    max-width: 48ch;
-  }
-  .fade-in {
-    animation: fade-in 0.5s ease both;
-  }
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-  .scroll-hint {
-    margin-top: 28px;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.8rem;
-    color: var(--fg-muted);
-    transition: opacity 0.4s;
-  }
-  .scroll-hint.is-hidden {
-    opacity: 0;
-  }
-  .scroll-hint span {
-    width: 18px;
-    height: 28px;
-    border: 1.5px solid var(--fg-muted);
-    border-radius: 10px;
-    position: relative;
-  }
-  .scroll-hint span::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 5px;
-    width: 3px;
-    height: 6px;
-    margin-left: -1.5px;
-    border-radius: 2px;
-    background: var(--accent);
-    animation: wheel 1.6s infinite;
-  }
-  @keyframes wheel {
-    0% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    100% {
-      transform: translateY(10px);
-      opacity: 0;
-    }
-  }
-  .planet-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    backdrop-filter: blur(8px);
-    font: 500 13px var(--font);
-    color: var(--fg);
-    white-space: nowrap;
-    transition: transform 0.2s;
-  }
-  .planet-label.is-hover {
-    transform: scale(1.08);
-  }
-  .planet-label small,
-  .cat h3 small {
-    color: var(--fg-muted);
-    font-weight: 500;
-  }
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-
-  /* ---- Works list ---- */
-  .works {
-    padding: 48px 0 80px;
-  }
-  .works-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 24px;
-  }
-  .works-head h2 {
-    margin: 0;
-    font-size: 1.6rem;
-    letter-spacing: -0.02em;
-  }
-  .muted {
-    color: var(--fg-muted);
-  }
-  .cat {
-    padding: 28px 0;
-    border-top: 1px solid var(--line);
-    scroll-margin-top: 24px;
-  }
-  .cat h3 {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0 0 16px;
-    font-size: 1.15rem;
-  }
-  .empty {
-    font-size: 0.9rem;
-  }
-  .cards {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 16px;
-  }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    overflow: hidden;
-    backdrop-filter: blur(8px);
-    transition: transform 0.2s, box-shadow 0.2s;
-    position: relative;
-  }
-  .card::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto auto 0;
-    width: 100%;
-    height: 3px;
-    background: var(--c);
-  }
-  .card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 40px -20px rgba(20, 26, 51, 0.35);
-  }
-  .card img {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
-    display: block;
-  }
-  .card-body {
-    padding: 16px 18px 18px;
-  }
-  .card-body h4 {
-    margin: 0 0 6px;
-    font-size: 1rem;
-  }
-  .card-body p {
-    margin: 0;
-    font-size: 0.9rem;
-    color: var(--fg-muted);
-  }
-  .card-link {
-    display: inline-block;
-    margin-top: 12px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--accent);
-    text-decoration: none;
-  }
-  .foot {
-    padding: 24px 0 40px;
-    color: var(--fg-muted);
-    font-size: 0.85rem;
-    border-top: 1px solid var(--line);
-  }
-</style>
