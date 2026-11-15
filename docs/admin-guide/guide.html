@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+@page { size: A4; margin: 16mm 15mm 16mm; }
+* { box-sizing: border-box; }
+body { font-family: 'Noto Sans JP', 'IPAPGothic', sans-serif; color: #1b2033; font-size: 10.5pt; line-height: 1.7; margin: 0; }
+h1 { font-size: 21pt; margin: 0 0 4px; letter-spacing: .02em; }
+.sub { color: #636b85; font-size: 9.5pt; margin: 0 0 14px; }
+h2 { font-size: 14pt; margin: 22px 0 8px; padding: 4px 0 4px 10px; border-left: 4px solid #4f5ff0; break-after: avoid; }
+h3 { font-size: 11pt; margin: 14px 0 6px; break-after: avoid; }
+p { margin: 6px 0; }
+ol, ul { margin: 6px 0; padding-left: 1.5em; }
+li { margin: 3px 0; }
+code { font-family: 'IPAGothic', monospace; background: #eef0f8; padding: 0 4px; border-radius: 3px; font-size: 9.5pt; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5pt; break-inside: auto; }
+th, td { border: 1px solid #dfe3ee; padding: 5px 8px; vertical-align: top; text-align: left; }
+th { background: #f1f3fa; font-weight: 700; }
+tr { break-inside: avoid; }
+td:first-child { font-weight: 700; white-space: nowrap; }
+.flow { display: flex; align-items: center; gap: 8px; margin: 10px 0 14px; }
+.flow div { flex: 1; border: 1.5px solid #c9cff0; border-radius: 10px; padding: 8px 10px; text-align: center; font-weight: 700; font-size: 10pt; background: #f7f8fe; }
+.flow div small { display: block; font-weight: 400; color: #636b85; font-size: 8.5pt; }
+.flow div.on { border-color: #12a37f; background: #e9f8f2; }
+.flow span { color: #9aa1b9; font-size: 14pt; }
+.url { display: inline-block; font-weight: 700; color: #4f5ff0; }
+.shot { margin: 8px 0 4px; border: 1px solid #dfe3ee; border-radius: 8px; overflow: hidden; break-inside: avoid; }
+.shot img { display: block; width: 100%; }
+.cap { font-size: 8.5pt; color: #636b85; margin: 2px 0 10px; text-align: center; }
+.note { background: #fff7e6; border: 1px solid #f3dca8; border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 9.5pt; break-inside: avoid; }
+.note.green { background: #e9f8f2; border-color: #bfe8d8; }
+.note b { display: block; margin-bottom: 2px; }
+.sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.1); }
+.pb { break-before: page; }
+.lock::before { content: '🔒 '; }
+</style></head><body>
+
+<h1>83Products 管理画面の使い方</h1>
+<p class="sub">作品を登録して公開するまで ・ 2026年11月15日版</p>
+
+<h2>1. 全体の流れ</h2>
+<p>作品はいつも次の順で公開します。入力は自動で保存されるので、保存ボタンはありません。</p>
+<div class="flow">
+  <div>① 非公開で作る<small>「+ 新規」でタイトルとカテゴリ</small></div><span>→</span>
+  <div>② 中身を整える<small>概要・サムネ・リンクなど</small></div><span>→</span>
+  <div class="on">③ 公開 ON<small>右上のスイッチ。すぐ反映</small></div>
+</div>
+
+<h2>2. ログイン</h2>
+<ol>
+  <li>ブラウザで <span class="url">https://83products.yassan-game.workers.dev/admin</span> を開く。</li>
+  <li>Cloudflare のログイン画面が出たら、登録済みのメールアドレスを入れて「Send me a code」を押す。</li>
+  <li>届いたメールの 6 桁のコードを入力する（コードは 10 分間、一度きり有効）。</li>
+  <li>「83 admin」のホームが開けばログイン完了。左が作品のツリー、右が作業エリアです。</li>
+</ol>
+<p>この手順書は、管理画面の上部バーにある「<b>使い方 PDF</b>」からいつでも開けます。</p>
+<p>ツリーの丸は公開状態を表します。<b style="color:#12a37f">● 緑</b> が公開、<b>○ 空洞</b> が非公開です。スマホでは左上の ☰ でツリーを開きます。</p>
+<div class="shot"><img src="home.png"></div>
+<p class="cap">ホーム画面。件数、公開前に足りないもの、未完了の ToDo が並びます</p>
+
+<h2 class="pb">3. 作品を登録する</h2>
+<ol>
+  <li>右上の「<b>+ 新規</b>」を押す。</li>
+  <li>タイトルを入れ、カテゴリ（ゲーム、アプリなど）を選んで「作成」。この時点ではまだ<b>非公開</b>です。</li>
+  <li>編集画面が開くので「基本」タブを上から埋める。入力をやめて 1 秒ほどで、タイトルの下に「保存しました 時刻」と出ます。</li>
+</ol>
+<div class="shot"><img src="new.png"></div>
+<p class="cap">「+ 新規」を押すと出る作成画面</p>
+
+<h3>「基本」タブの項目（公開すると公開ページに出ます）</h3>
+<p>必須はタイトルとカテゴリだけです。空欄のままでも公開できます。</p>
+<table>
+<tr><th>項目</th><th>意味</th><th>書き方の例</th></tr>
+<tr><td>タイトル</td><td>作品名。星表と星のラベルに出る</td><td>星めぐりパズル</td></tr>
+<tr><td>概要</td><td>星表に出る 1〜2 行の説明</td><td>小さな惑星を巡るワンボタンのパズルゲーム</td></tr>
+<tr><td>本文</td><td>詳しい説明（Markdown）。今の公開ページではまだ使われていない</td><td>空欄で OK</td></tr>
+<tr><td>カテゴリ</td><td>どの枝に属するか</td><td>ゲーム</td></tr>
+<tr><td>ステータス</td><td>進み具合。公開ページでは「公開中・開発中・アーカイブ」の 3 つにまとめて表示（アイデア・開発中・休止は「開発中」）</td><td>公開中</td></tr>
+<tr><td>リリース日</td><td>公開した日。星表に「2026.11」のように出る</td><td>2026-11-15</td></tr>
+<tr><td>公開ID</td><td>星表の番号。他の作品と同じ番号は使えない</td><td>83P-G01（G=ゲーム、A=アプリなど自由に）</td></tr>
+<tr><td>slug（URL）</td><td>作品の識別名。作成時に自動で入るので変えなくてよい</td><td>star-puzzle</td></tr>
+<tr><td>並び順</td><td>小さい数字ほど前に並ぶ</td><td>10, 20, 30（間を空けると後で入れやすい）</td></tr>
+<tr><td>親アイテム</td><td>シリーズやチャンネルの下に置きたいとき</td><td>YouTube チャンネルの下に個別動画</td></tr>
+<tr><td>大きく見せる</td><td>注目作品。星が大きくなり、星表でも目立つ</td><td>代表作だけチェック</td></tr>
+<tr><td>サムネ画像 URL</td><td>星表の行に触れたときに浮かぶ画像。画像そのものの URL を貼る</td><td>https://img.youtube.com/vi/動画ID/hqdefault.jpg</td></tr>
+<tr><td>タグ</td><td>カンマ区切りのキーワード</td><td>Unity, パズル</td></tr>
+</table>
+
+<div class="note"><b>サムネ画像について</b>今は画像のアップロード機能がないため、ネット上にある画像の URL を使います。YouTube のサムネ、Steam や itch.io のストア画像、GitHub に置いた画像などです。画像を右クリックして「画像アドレスをコピー」で取れます。貼ると下のプレビューに表示されます。</div>
+
+<div class="shot"><img src="editor.png"></div>
+<p class="cap">編集画面の「基本」タブ。右上のスイッチで公開／非公開を切り替えます</p>
+
+<h2 class="pb">4. リンクを登録する</h2>
+<p>作品のページやストア、動画へのリンクです。「リンク」タブで「+ リンクを追加」を押し、種類・表示名・URL を入れます。</p>
+<ul>
+  <li>「公開」にチェックしたリンクだけが公開ページに出ます。</li>
+  <li><b>一番上の公開リンクがメイン</b>です。星表の行をクリックするとそこが開きます。順番は ↑↓ で入れ替えます。</li>
+  <li>URL は <code>https://</code> で始まるものだけ保存できます。</li>
+  <li>例：種類「ストア」、表示名「itch.io」、URL「https://xxx.itch.io/star-puzzle」</li>
+</ul>
+
+<h2>5. 非公開のメモ（鍵マークのタブ）</h2>
+<p>残りの 3 つのタブは<b>常に非公開</b>です。公開スイッチを ON にしても外には出ません。空欄のままでも公開できます。</p>
+<table>
+<tr><th>タブ</th><th>何を書くか</th><th>例</th></tr>
+<tr><td class="lock">開発情報</td><td>リポジトリ・プレビュー・本番の URL、使った技術、開発メモ</td><td>https://github.com/sawagit/star-puzzle、Unity 6 / C#</td></tr>
+<tr><td class="lock">サービス</td><td>使っている外部サービスの名前、役割、管理画面の URL</td><td>Cloudflare、ホスティング、https://dash.cloudflare.com</td></tr>
+<tr><td class="lock">ToDo</td><td>公開前にやることのチェックリスト</td><td>サムネを作る、紹介動画を撮る</td></tr>
+</table>
+<div class="note"><b>保存できないもの</b>API キー、パスワード、メールアドレス、電話番号は保存できません。それらしい文字列を入れると欄が赤くなり、保存が止まります。キーはパスワード管理アプリなど別の場所に置いてください。</div>
+
+<h2>6. 公開して確かめる</h2>
+<ol>
+  <li>編集画面右上のスイッチを押して「<b>公開 ON</b>」にする。画面下に「公開しました」と出て、ツリーの丸が緑になります。</li>
+  <li>右上の「公開サイト ↗」で公開ページを開く（開いていれば再読み込み）。反映はすぐで、デプロイは要りません。</li>
+  <li>星系の枝の周りに新しい星が増えていることを確かめる。</li>
+  <li>スクロールして一周すると「星表」が出ます。行にタイトル・公開ID・日付・ステータスが出ていれば OK。行に触れるとサムネが浮かび、クリックでメインのリンクが開きます。</li>
+</ol>
+<p>非公開に戻すときは、同じスイッチをもう一度押すだけです。内容は消えません。</p>
+
+<div style="break-inside:avoid"><h3>困ったとき</h3>
+<table>
+<tr><th>症状</th><th>原因と対処</th></tr>
+<tr><td>ON にしたのに<br>公開ページに出ない</td><td>カテゴリが非公開です（編集画面に赤いお知らせが出ます）。左下の「カテゴリとサービスを編集」で、そのカテゴリを ON にする</td></tr>
+<tr><td>「保存できませんでした」<br>と赤く出る</td><td>赤い欄の下に理由が出ます。公開ID の重複、<code>https://</code> 以外の URL、キーやメールらしき文字列がよくある原因です</td></tr>
+<tr><td>番号つき（403 など）や<br>「ネットワークに接続できません<br>でした」と出る</td><td>ログインが切れています。ページを再読み込みしてコードでログインし直し、もう一度入力する</td></tr>
+<tr><td>サムネが表示されない</td><td>URL が画像ではなくページの URL になっています。画像を右クリック →「画像アドレスをコピー」したものを貼る</td></tr>
+<tr><td>間違えて作った</td><td>編集画面の一番下「このアイテムを削除」。元には戻せません</td></tr>
+</table>
+</div>
+<p>ホーム画面の「公開前に足りないもの」には、概要・サムネ・公開リンクがない作品が並びます。公開前の確認に使えます。</p>
+
+<h2>7. （任意）カテゴリの色を深宇宙デザインに合わせる</h2>
+<p>カテゴリの色がそのまま星と枝の色になります。初期の色は以前の明るいデザイン用なので、試作と同じ見た目にしたい場合は次のように変えます。</p>
+<ol>
+  <li>左のツリーの下にある「カテゴリとサービスを編集」を開く。</li>
+  <li>各カテゴリの「色」の欄をクリックし、下の色コードを入力する（Chrome では色を選ぶ画面の下の欄を HEX に切り替えて入力）。選んだ瞬間に保存されます。</li>
+  <li>公開ページを再読み込みして色を確かめる。</li>
+</ol>
+<table style="width:60%">
+<tr><th>カテゴリ</th><th>色コード</th></tr>
+<tr><td>ゲーム（Games）</td><td><span class="sw" style="background:#FF6F61"></span>#FF6F61</td></tr>
+<tr><td>アプリ（Apps）</td><td><span class="sw" style="background:#29C5E6"></span>#29C5E6</td></tr>
+<tr><td>YouTube</td><td><span class="sw" style="background:#FF5C8A"></span>#FF5C8A</td></tr>
+<tr><td>X</td><td><span class="sw" style="background:#B9A6FF"></span>#B9A6FF</td></tr>
+<tr><td>Discord</td><td><span class="sw" style="background:#7CE6A4"></span>#7CE6A4</td></tr>
+</table>
+<p>同じ画面で、英語名（枝を通過するときに大きく出る名前）や並び順も変えられます。各カテゴリ右上のスイッチを OFF にすると、その枝ごと公開ページから隠れます。</p>
+
+</body></html>
