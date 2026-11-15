@@ -1,7 +1,7 @@
 // 公開ページの 3D 星系（試作 /mnt/project-files/design/public-prototype.html を移植）
 // - 中心の恒星 = 83Products、枝 = カテゴリ、公転する星 = 公開アイテム
 // - スクロールでカメラが一周 → 一周後に星表（index.astro がサーバー側で描画）と連動
-// - ロケット / 中継衛星 / コロニー / 連絡船 / 流れ星 / 彗星 / UFO / ソナーはアクセント
+// - ロケット / 中継衛星 / コロニー / 連絡船 / 流れ星 / 彗星 / UFO / SENSEOFVOID のポッド / ソナーはアクセント
 import * as THREE from 'three';
 
 /**
@@ -360,6 +360,64 @@ export function initSpace(DATA) {
     });
     if (ufoT >= 1) { ufoT = -1; nextUfo = t + 45 + Math.random() * 30; ufos.forEach(u => u.visible = false); }
   }
+  // 6) Pods from SENSEOFVOID: a white pod chased by two red ones, weaving around the system.
+  //    Shape copied from the game (radius-5 sphere + two open cones behind, forward = local -Z), shrunk to a small accent.
+  //    Lit by the central star (light from the origin) so they read as solid little machines among the line-art crafts.
+  const POD_SKIN = { white: "/space/pod-white.jpg", red: "/space/pod-red.jpg" };   // public/space/ (paint copied from the game)
+  const podLoader = new THREE.TextureLoader();
+  function podMaterial(url) {
+    const tex = podLoader.load(url); tex.wrapS = THREE.RepeatWrapping; tex.offset.x = -.25;   // image centre faces the front (-Z), as in the game
+    return new THREE.ShaderMaterial({
+      uniforms: { uMap: { value: tex } },
+      vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vV;
+        void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: `uniform sampler2D uMap; varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vV;
+        void main(){ vec3 n = normalize(vN), L = normalize(-vW), V = normalize(vV);
+          float dif = max(dot(n, L), 0.), rim = pow(1. - max(dot(n, V), 0.), 3.);
+          vec3 c = texture2D(uMap, vUv).rgb * (.16 + dif * .95) + vec3(.55, .62, 1.) * rim * .35;
+          gl_FragColor = vec4(c, 1.); }`
+    });
+  }
+  const coneMat = new THREE.MeshBasicMaterial({ color: "#2a2d36", side: THREE.DoubleSide });
+  function makePod(skin, glowCol) {
+    const p = new THREE.Group(), body = new THREE.Group(); p.add(body);
+    body.add(new THREE.Mesh(new THREE.SphereGeometry(5, 24, 16), podMaterial(POD_SKIN[skin])));
+    const glows = [];
+    for (const x of [-2.5, 2.5]) {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(1, 2, 12, 1, true), coneMat);
+      cone.rotation.x = -Math.PI / 2; cone.position.set(x, 0, 4.5); body.add(cone);
+      const g = sprite(glowTex, glowCol, 5, .9); g.position.set(x, 0, 6.6); body.add(g); glows.push(g);
+    }
+    body.scale.setScalar(.034);
+    p.add(hitbox(1.1, { kind: "pod" }));
+    const trail = Array.from({ length: 22 }, () => { const t = sprite(glowTex, glowCol, .14, 0); world.add(t); t.userData.life = 0; return t; });
+    p.userData = { body, glows, trail, trailI: 0, prev: new THREE.Vector3() };
+    p.visible = false; world.add(p); return p;
+  }
+  const pods = [makePod("white", "#8FC8FF"), makePod("red", "#FFB070"), makePod("red", "#FFB070")];
+  // A wandering closed path around the system (sum of slow sines); chasers follow the same path a little behind.
+  const podPath = (u, out) => out.set(
+    Math.sin(u * .23) * 10 + Math.sin(u * .61 + 1.3) * 3.2,
+    3.2 + Math.sin(u * .37 + .4) * 2.4 + Math.sin(u * .9) * .6,
+    Math.cos(u * .19 + .7) * 8.5 + Math.sin(u * .53 + 2.1) * 3);
+  const pdA = new THREE.Vector3(), pdB = new THREE.Vector3(), pdV = new THREE.Vector3(), pdUp = new THREE.Vector3(0, 1, 0);
+  function tickPods(t, dt) {
+    pods.forEach((p, i) => {
+      const u = t * .9 - i * .55;                       // the chasers run the same course ~0.6 s behind
+      podPath(u, pdA); podPath(u + .05, pdB);
+      if (i) { pdA.x += Math.sin(t * 1.7 + i * 2) * .35 * i; pdA.y += Math.cos(t * 1.3 + i) * .25; }   // jink a little
+      pdV.subVectors(pdB, pdA).normalize();
+      p.visible = true; p.position.copy(pdA);
+      p.lookAt(pdA.x - pdV.x, pdA.y - pdV.y, pdA.z - pdV.z);     // forward is local -Z
+      const turn = Math.atan2(pdV.x, pdV.z), d = turn - (p.userData.turn ?? turn);
+      p.userData.turn = turn;
+      p.userData.body.rotation.z += ((clamp(-Math.atan2(Math.sin(d), Math.cos(d)) * 18, -.8, .8)) - p.userData.body.rotation.z) * .08;  // bank into turns
+      p.userData.glows.forEach((g, k) => g.material.opacity = .65 + Math.sin(t * 30 + k * 2 + i) * .25);
+      const tr = p.userData.trail[p.userData.trailI++ % p.userData.trail.length];
+      tr.position.copy(pdA).addScaledVector(pdV, -.28); tr.userData.life = 1;
+      p.userData.trail.forEach(x => { if (x.userData.life > 0) { x.userData.life -= dt * 2.2; x.material.opacity = Math.max(x.userData.life, 0) * .45; } });
+    });
+  }
   function tickGimmicks(t, dt) {
     camera.matrixWorld.extractBasis(camR, camU, camF);
     // meteors
@@ -403,6 +461,7 @@ export function initSpace(DATA) {
     }
     shTrail.forEach(tr => { if (tr.userData.life > 0) { tr.userData.life -= dt * 1.2; tr.material.opacity = Math.max(tr.userData.life, 0) * .5; } });
     tickUfo(t, dt);
+    tickPods(t, dt);
     // pings
     pings.forEach(r => { if (r.userData.life > 0) { r.userData.life -= dt * .8; const l = Math.min(r.userData.life, 1); r.scale.setScalar(.4 + (1 - l) * 3.6); r.material.opacity = l * .6; } });
   }
@@ -531,6 +590,7 @@ export function initSpace(DATA) {
         d.kind === "rocket" ? `<span class="id">LAUNCH · 最新作</span>${esc(d.item.title)} を ${esc(d.item.cat.name_en)} へ運搬中` :
         d.kind === "sat" ? `<span class="id">RELAY SATELLITE</span>${esc(d.cat.name_en)} の発信を中継中` :
         d.kind === "colony" ? `<span class="id">COLONY 83</span>このサイトについて` :
+        d.kind === "pod" ? `<span class="id">POD · SENSEOFVOID</span>白いポッドを赤いポッドが追いかけています` :
         d.kind === "ufo" ? `<span class="id">UNIDENTIFIED</span>正体不明。クリックすると逃げます` :
         d.kind === "shuttle" ? `<span class="id">SHUTTLE</span>コロニーと${esc(shTarget?.data.name_en)}を往復中` :
         `<span class="id">BRANCH</span>${esc(d.cat.name_en)} · ${esc(d.cat.name)}`;
