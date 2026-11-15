@@ -116,6 +116,7 @@ export function initSpace(DATA) {
 
 
   // ---------- Nebula: procedural (domain-warped fBm), baked once into a cube map ----------
+  let sky = null;  // nebula backdrop (set below)
   {
     const NOISE = `
       vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;} vec4 mod289(vec4 x){return x-floor(x*(1./289.))*289.;}
@@ -157,7 +158,7 @@ export function initSpace(DATA) {
           vec3 col = mix(teal, violet, h1);
           col = mix(col, magenta, h2 * .8);
           col = mix(col, gold, smoothstep(.2, .7, n) * .35);
-          vec3 c = deep + col * gas * .38 + col * haze * .1 + rose * wisps * .13;
+          vec3 c = deep + col * gas * .38 + col * haze * .06 + rose * wisps * .13;
           float core = pow(max(n, 0.), 3.) * band * mask;
           c += gold * core * .55 + vec3(.85,.9,1.) * pow(band, 8.) * .06 * (.5 + mask);
           c *= 1. - dust * .3;
@@ -171,8 +172,22 @@ export function initSpace(DATA) {
     const cubeRT = new THREE.WebGLCubeRenderTarget(isNarrow() ? 512 : 1024, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
     const cubeCam = new THREE.CubeCamera(1, 200, cubeRT);
     cubeCam.update(renderer, nebScene);
-    scene.background = cubeRT.texture;
     nebMat.dispose();
+    // Show the baked nebula on a camera-centred sphere: it stays at infinity, turns with the stars,
+    // is slightly soft-focused (reads as far behind the crisp stars) and its hue drifts slowly.
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, depthTest: false,
+      uniforms: { uCube: { value: cubeRT.texture }, uHue: { value: 0 } },
+      vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+      fragmentShader: `uniform samplerCube uCube; uniform float uHue; varying vec3 vDir;
+        vec3 hueRot(vec3 c, float a){ const vec3 k = vec3(.57735); float ca = cos(a); return c*ca + cross(k,c)*sin(a) + k*dot(k,c)*(1.-ca); }
+        void main(){ vec3 d = normalize(vDir), t1 = normalize(cross(d, vec3(0., 1., .001))), t2 = cross(d, t1); float k = .0055;
+          vec3 c = textureCube(uCube, d).rgb * .2;
+          for (int i = 0; i < 8; i++) { float a = float(i) * .785398; c += textureCube(uCube, d + (cos(a) * t1 + sin(a) * t2) * k * (1. + float(i - (i / 2) * 2))).rgb * .1; }
+          gl_FragColor = vec4(max(hueRot(c, uHue), 0.), 1.); }`
+    });
+    sky = new THREE.Mesh(new THREE.SphereGeometry(150, 48, 24), skyMat);
+    sky.renderOrder = -10; scene.add(sky);
   }
   // Starfield: two layers, a few bright stars with spikes
   const N = isNarrow() ? 2000 : 4500;
@@ -181,6 +196,14 @@ export function initSpace(DATA) {
   const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute("position", new THREE.BufferAttribute(sp, 3));
   const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ map: glowTex, size: .95, color: "#FFFFFF", transparent: true, blending: ADD, depthWrite: false, opacity: 1 }));
   scene.add(stars);
+  // A few bright foreground stars: the spread in brightness gives depth in front of the gas
+  {
+    const B = isNarrow() ? 140 : 320, bp = new Float32Array(B * 3), bc = new Float32Array(B * 3);
+    const tints = [new THREE.Color("#FFFFFF"), new THREE.Color("#CFE0FF"), new THREE.Color("#FFE6C8"), new THREE.Color("#E0E8FF")];
+    for (let i = 0; i < B; i++) { const u = Math.random()*2-1, t = Math.random()*Math.PI*2, r = 30 + Math.random()*40, s = Math.sqrt(1-u*u); bp.set([r*s*Math.cos(t), r*u, r*s*Math.sin(t)], i*3); const c = tints[i % 4]; bc.set([c.r, c.g, c.b], i*3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(bp, 3)); g.setAttribute("color", new THREE.BufferAttribute(bc, 3));
+    stars.add(new THREE.Points(g, new THREE.PointsMaterial({ map: glowTex, size: 1.9, vertexColors: true, transparent: true, blending: ADD, depthWrite: false, opacity: 1 })));
+  }
   {
     const M = isNarrow() ? 3000 : 7000, mp = new Float32Array(M * 3), mc = new Float32Array(M * 3);
     const axis = new THREE.Vector3(.28, 1, .38).normalize(), t1 = new THREE.Vector3(1, 0, 0).cross(axis).normalize(), t2 = axis.clone().cross(t1);
@@ -468,6 +491,11 @@ export function initSpace(DATA) {
       rootGlow.scale.setScalar(3 + Math.sin(t * 1.4) * 0.12);
       rootSpike.material.rotation = Math.sin(t * .2) * .05;
       spikes.forEach((s, i) => s.material.opacity = .26 + Math.sin(t * 1.7 + i) * .07);
+    }
+    if (sky) {
+      sky.position.copy(camera.position);
+      sky.rotation.y = stars.rotation.y;   // gas and stars turn together, so stars never slide across the gas
+      if (!reduceMotion) sky.material.uniforms.uHue.value = (t / 90) * Math.PI * 2;   // full hue cycle every 90 s
     }
     // crafts
     {
